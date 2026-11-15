@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A little surprise</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background: #fffaf8; color: #392d34; font: 16px/1.5 system-ui, sans-serif; }
+  main { width: min(100%, 390px); text-align: center; }
+  h1 { font: 400 3rem Georgia, serif; }
+  input, button { width: 100%; padding: 14px; font: inherit; border-radius: 8px; }
+  input { border: 1px solid #cdbcc4; }
+  button { margin-top: 12px; color: white; background: #804a60; border: 0; cursor: pointer; }
+  iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: white; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main id="unlock">
+  <h1>A little surprise</h1>
+  <form id="form">
+    <label for="password">Enter the passphrase</label>
+    <input id="password" type="password" autocomplete="off" required>
+    <button>Open</button>
+    <p id="status" role="status"></p>
+  </form>
+</main>
+<iframe id="site" title="Birthday surprise" hidden></iframe>
+<script>
+const form = document.getElementById("form");
+const status = document.getElementById("status");
+const decode = (text) => Uint8Array.from(atob(text), c => c.charCodeAt(0));
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  status.textContent = "Opening…";
+  const button = form.querySelector("button");
+  button.disabled = true;
+  try {
+    const response = await fetch("data.json");
+    if (!response.ok) throw new Error("Cannot load the surprise.");
+    const encrypted = await response.json();
+    const material = await crypto.subtle.importKey("raw", new TextEncoder().encode(document.getElementById("password").value), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey({name:"PBKDF2", salt:decode(encrypted.salt), iterations:600000, hash:"SHA-256"}, material, {name:"AES-GCM", length:256}, false, ["decrypt"]);
+    const plaintext = await crypto.subtle.decrypt({name:"AES-GCM", iv:decode(encrypted.iv)}, key, decode(encrypted.data));
+    const data = JSON.parse(new TextDecoder().decode(plaintext));
+    const urls = {};
+    for (const [path, value] of Object.entries(data.assets)) {
+      const extension = path.split(".").pop().toLowerCase();
+      const types = {jpg:"image/jpeg", jpeg:"image/jpeg", png:"image/png", mov:"video/quicktime", mp4:"video/mp4", webm:"video/webm"};
+      urls[path] = URL.createObjectURL(new Blob([decode(value)], {type:types[extension] || "application/octet-stream"}));
+    }
+    const replacePaths = (source) => {
+      for (const [path, url] of Object.entries(urls)) source = source.split(path).join(url);
+      return source;
+    };
+    const blob = (text, type) => URL.createObjectURL(new Blob([text], {type}));
+    const css = blob(replacePaths(data.css), "text/css");
+    const content = blob(replacePaths(data.content), "text/javascript");
+    const birthdayScript = replacePaths(data.script).replace(
+      'new URLSearchParams(window.location.search)',
+      'new URLSearchParams(window.parent.location.search)'
+    );
+    const script = blob(birthdayScript, "text/javascript");
+    const html = data.html.replace('href="style.css"', 'href="' + css + '"')
+      .replace('src="content.js"', 'src="' + content + '"')
+      .replace('src="birthday.js"', 'src="' + script + '"');
+    const frame = document.getElementById("site");
+    frame.srcdoc = html;
+    frame.hidden = false;
+    document.getElementById("unlock").hidden = true;
+    document.getElementById("password").value = "";
+  } catch (error) {
+    status.textContent = "Couldn’t open the surprise. Check the passphrase and try again.";
+    button.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
