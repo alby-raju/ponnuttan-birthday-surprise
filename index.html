@@ -50,6 +50,7 @@ form.addEventListener("submit", async (event) => {
       const types = {jpg:"image/jpeg", jpeg:"image/jpeg", png:"image/png", mov:"video/quicktime", mp4:"video/mp4", webm:"video/webm"};
       urls[path] = URL.createObjectURL(new Blob([decode(value)], {type:types[extension] || "application/octet-stream"}));
     }
+    if (data.video) urls[data.video.path] = "about:blank";
     const replacePaths = (source) => {
       for (const [path, url] of Object.entries(urls)) source = source.split(path).join(url);
       return source;
@@ -69,6 +70,73 @@ form.addEventListener("submit", async (event) => {
       html = html.replace("</body>", '<script src="countdown-control.js"><\/script></body>');
     }
     const frame = document.getElementById("site");
+    if (data.video) {
+      frame.addEventListener("load", () => {
+        const doc = frame.contentDocument;
+        const finale = doc.getElementById("finale");
+        const player = doc.getElementById("birthday-video");
+        const status = doc.createElement("p");
+        status.setAttribute("role", "status");
+        const retry = doc.createElement("button");
+        retry.type = "button";
+        retry.textContent = "Try loading the video again";
+        retry.hidden = true;
+        player.before(status, retry);
+        player.hidden = true;
+        let loading = false;
+        let loaded = false;
+
+        async function loadVideo() {
+          if (loading || loaded) return;
+          loading = true;
+          retry.hidden = true;
+          const messages = [
+            "Ponnuttaayude wishes loading… 🎬",
+            "Ellaarum ready aavukayaanu… 😄",
+            "Kurachu koodi kaathirikko, video varunnundu… 🤍",
+          ];
+          let messageIndex = 0;
+          status.textContent = messages[0];
+          const messageTimer = setInterval(() => {
+            messageIndex = Math.min(messageIndex + 1, messages.length - 1);
+            status.textContent = messages[messageIndex];
+          }, 4000);
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 120000);
+          try {
+            const response = await fetch(data.video.file + "?v=" + data.video.version, { signal: controller.signal });
+            if (!response.ok) throw new Error("Video download failed");
+            const ciphertext = await response.arrayBuffer();
+            const plaintext = await crypto.subtle.decrypt(
+              { name: "AES-GCM", iv: decode(data.video.iv) }, key, ciphertext
+            );
+            player.src = URL.createObjectURL(new Blob([plaintext], {type: data.video.type}));
+            player.hidden = false;
+            status.textContent = "";
+            loaded = true;
+          } catch (error) {
+            status.textContent = "Couldn’t load the video. Check your connection and try again.";
+            retry.hidden = false;
+          } finally {
+            clearInterval(messageTimer);
+            clearTimeout(timeout);
+            loading = false;
+          }
+        }
+        retry.addEventListener("click", loadVideo);
+        const observer = new MutationObserver(() => {
+          if (!finale.hidden) {
+            observer.disconnect();
+            loadVideo();
+          }
+        });
+        observer.observe(finale, { attributes: true, attributeFilter: ["hidden"] });
+        if (!finale.hidden) {
+          observer.disconnect();
+          loadVideo();
+        }
+      }, {once: true});
+    }
     frame.srcdoc = html;
     frame.hidden = false;
     document.getElementById("unlock").hidden = true;
