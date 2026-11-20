@@ -73,7 +73,7 @@ form.addEventListener("submit", async (event) => {
     if (data.video) {
       frame.addEventListener("load", () => {
         const doc = frame.contentDocument;
-        const finale = doc.getElementById("finale");
+        const puzzle = doc.getElementById("puzzle");
         const player = doc.getElementById("birthday-video");
         const status = doc.createElement("p");
         status.setAttribute("role", "status");
@@ -98,7 +98,7 @@ form.addEventListener("submit", async (event) => {
           let messageIndex = 0;
           status.textContent = messages[0];
           const messageTimer = setInterval(() => {
-            messageIndex = Math.min(messageIndex + 1, messages.length - 1);
+            messageIndex = (messageIndex + 1) % messages.length;
             status.textContent = messages[messageIndex];
           }, 4000);
           const controller = new AbortController();
@@ -125,13 +125,13 @@ form.addEventListener("submit", async (event) => {
         }
         retry.addEventListener("click", loadVideo);
         const observer = new MutationObserver(() => {
-          if (!finale.hidden) {
+          if (!puzzle.hidden) {
             observer.disconnect();
             loadVideo();
           }
         });
-        observer.observe(finale, { attributes: true, attributeFilter: ["hidden"] });
-        if (!finale.hidden) {
+        observer.observe(puzzle, { attributes: true, attributeFilter: ["hidden"] });
+        if (!puzzle.hidden) {
           observer.disconnect();
           loadVideo();
         }
